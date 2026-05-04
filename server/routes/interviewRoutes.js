@@ -39,8 +39,7 @@ router.post('/analyze-resume', upload.single('resume'), async (req, res) => {
       res.json({ 
         success: true, 
         questions,
-        extractedData,
-        resumeText
+        extractedData
       });
     } catch (aiError) {
       console.error('AI Service Error:', aiError);
@@ -104,21 +103,6 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Delete Error:', error);
     res.status(500).json({ error: 'Failed to delete interview' });
-  }
-});
-
-router.post('/improve-resume', async (req, res) => {
-  try {
-    const { resumeText, extractedData } = req.body;
-    if (!resumeText || !extractedData) {
-      return res.status(400).json({ error: 'Missing resume data' });
-    }
-    const { generateImprovedResume } = require('../services/aiService');
-    const improvedResumeMarkdown = await generateImprovedResume(resumeText, extractedData);
-    res.json({ success: true, improvedResume: improvedResumeMarkdown });
-  } catch (error) {
-    console.error('Improve Resume Error:', error);
-    res.status(500).json({ error: 'Failed to generate improved resume' });
   }
 });
 

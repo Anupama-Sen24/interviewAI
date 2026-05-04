@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { MessageSquare, Target, FileText, ChevronLeft, Award, TrendingUp, BarChart, CheckCircle, Sparkles } from 'lucide-react';
+import { MessageSquare, Target, FileText, ChevronLeft, Award, TrendingUp, BarChart, CheckCircle } from 'lucide-react';
 import Button from './ui/Button';
 import Card from './ui/Card';
 import { useNavigate } from 'react-router-dom';

@@ -7,22 +7,61 @@ const Footer = () => {
   return (
     <footer className="bg-white border-t border-gray-100 pt-24 pb-12 px-8 relative z-10">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col items-center text-center mb-16 space-y-6">
-          <div className="flex items-center gap-2 group cursor-pointer">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 transition-transform">
-              <Sparkles size={24} />
+        <div className="grid md:grid-cols-4 gap-12 mb-20">
+          {/* Brand */}
+          <div className="md:col-span-1 space-y-6">
+            <div className="flex items-center gap-2 group cursor-pointer">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 transition-transform">
+                <Sparkles size={24} />
+              </div>
+              <span className="text-2xl font-black tracking-tighter text-gray-900">InterviewAI</span>
             </div>
-            <span className="text-2xl font-black tracking-tighter text-gray-900">InterviewAI</span>
+            <p className="text-sm text-text-muted font-medium leading-relaxed">
+              Empowering the next generation of professionals with cutting-edge AI interview simulations. Practice, improve, and succeed.
+            </p>
+            <div className="flex gap-4">
+              {[Globe, Sparkles].map((Icon, i) => (
+
+
+                <a key={i} href="#" className="p-2 bg-gray-50 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-all">
+                  <Icon size={18} />
+                </a>
+              ))}
+            </div>
           </div>
-          <p className="text-sm text-text-muted font-medium leading-relaxed max-w-lg">
-            Empowering the next generation of professionals with cutting-edge AI interview simulations. Practice, improve, and succeed.
-          </p>
-          <div className="flex gap-4 justify-center">
-            {[Globe, Sparkles].map((Icon, i) => (
-              <a key={i} href="#" className="p-2 bg-gray-50 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-all">
-                <Icon size={18} />
-              </a>
-            ))}
+
+          {/* Links */}
+          <div>
+            <h4 className="font-black text-gray-900 mb-6 uppercase tracking-widest text-xs">Product</h4>
+            <ul className="space-y-4">
+              {['Dashboard', 'Sarah AI', 'Skill Analysis'].map(item => (
+                <li key={item}>
+                  <a href="#" className="text-sm text-text-muted font-bold hover:text-primary transition-colors">{item}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-black text-gray-900 mb-6 uppercase tracking-widest text-xs">Company</h4>
+            <ul className="space-y-4">
+              {['About Us', 'Careers', 'Blog', 'Contact'].map(item => (
+                <li key={item}>
+                  <a href="#" className="text-sm text-text-muted font-bold hover:text-primary transition-colors">{item}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-black text-gray-900 mb-6 uppercase tracking-widest text-xs">Resources</h4>
+            <ul className="space-y-4">
+              {['Documentation', 'Help Center', 'Privacy Policy', 'Terms'].map(item => (
+                <li key={item}>
+                  <a href="#" className="text-sm text-text-muted font-bold hover:text-primary transition-colors">{item}</a>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 

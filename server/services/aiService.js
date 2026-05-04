@@ -68,7 +68,6 @@ Return strictly JSON:
       const response = await openai.chat.completions.create({
         model: isOpenRouter ? "google/gemini-2.5-flash" : "gpt-3.5-turbo",
         messages: messages,
-        max_tokens: 1000,
       });
       text = response.choices[0].message.content;
     } else if (GEMINI_API_KEY) {
@@ -157,7 +156,6 @@ Make questions based on the candidate’s role, experience,interviewMode, projec
       const response = await openai.chat.completions.create({
         model: isOpenRouter ? "google/gemini-2.5-flash" : "gpt-3.5-turbo",
         messages: messages,
-        max_tokens: 1000,
       });
       text = response.choices[0].message.content;
     } else if (GEMINI_API_KEY) {
@@ -239,21 +237,20 @@ Answer: ${answer}
 
   try {
     let text;
-    if (isOpenRouter || OPENAI_API_KEY) {
-      const response = await openai.chat.completions.create({
-        model: isOpenRouter ? "google/gemini-2.5-flash" : "gpt-3.5-turbo",
-        messages: messages,
-        response_format: { type: "json_object" },
-        max_tokens: 1000,
-      });
-      text = response.choices[0].message.content;
-    } else if (GEMINI_API_KEY) {
+    if (GEMINI_API_KEY) {
       const combinedText = messages.map(m => m.content).join('\n\n');
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: combinedText }] }],
         generationConfig: { responseMimeType: "application/json" }
       });
       text = result.response.text();
+    } else if (OPENAI_API_KEY) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: messages,
+        response_format: { type: "json_object" },
+      });
+      text = response.choices[0].message.content;
     }
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(cleaned);
@@ -288,53 +285,4 @@ const evaluateInterview = async (answers) => {
   };
 };
 
-const generateImprovedResume = async (resumeText, data) => {
-  initAI();
-  const systemPrompt = `
-You are an Expert Technical Recruiter and Resume Writer.
-Based on the provided original resume text and the extracted skills/projects, completely rewrite the resume to be highly ATS-friendly and impactful for a ${data.role} interview.
-
-Instructions:
-1. Use clean, professional Markdown format.
-2. Ensure there is a Professional Summary, Core Skills section, Professional Experience, and Projects.
-3. Inject missing but relevant industry-standard keywords based on the candidate's skills.
-4. Convert bullet points into "Action-Verb + Context + Result" statements.
-5. Fix any formatting or structural issues from the original text.
-
-Return ONLY the markdown text. Do not add any conversational filler.
-`;
-
-  const userPrompt = `
-    Target Role: ${data.role}
-    Extracted Skills: ${data.skills.join(', ')}
-    Original Resume Text:
-    ${resumeText.substring(0, 3000)}
-  `;
-
-  try {
-    let text;
-    if (isOpenRouter || OPENAI_API_KEY) {
-      const response = await openai.chat.completions.create({
-        model: isOpenRouter ? "google/gemini-2.5-flash" : "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        max_tokens: 3000,
-      });
-      text = response.choices[0].message.content;
-    } else if (GEMINI_API_KEY) {
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }]
-      });
-      text = result.response.text();
-    }
-    return text;
-  } catch (error) {
-    console.error("Resume Improve Error:", error);
-    return "# Error\nFailed to generate resume. Please try again.";
-  }
-};
-
-module.exports = { extractResumeData, generateQuestions, evaluateInterview, generateImprovedResume };
-
+module.exports = { extractResumeData, generateQuestions, evaluateInterview };

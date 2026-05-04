@@ -11,7 +11,7 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
   const [currentAnswer, setCurrentAnswer] = useState('');
   const [timeLeft, setTimeLeft] = useState(60);
   const [isListening, setIsListening] = useState(false);
-
+  
   // Support both new flat array and old technical/hr structure for backward compatibility
   const allQuestions = Array.isArray(questions) ? questions : [...(questions.technical || []), ...(questions.hr || [])];
 
@@ -31,64 +31,12 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
     }
   }, [currentIdx]);
 
-  const [voicesLoaded, setVoicesLoaded] = useState(false);
-
-  useEffect(() => {
-    const handleVoicesChanged = () => setVoicesLoaded(true);
-    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
-    if (window.speechSynthesis.getVoices().length > 0) {
-      setVoicesLoaded(true);
-    }
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, []);
-
   const speakQuestion = (text) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.05;
+    utterance.rate = 1.1;
     utterance.pitch = 1;
-
-    const isMale = setupData?.agent?.name?.toLowerCase().includes('mark') || setupData?.agent?.video?.includes('male');
-
-    const setVoiceAndSpeak = () => {
-      let voices = window.speechSynthesis.getVoices();
-      let selectedVoice = null;
-
-      if (voices.length > 0) {
-        if (isMale) {
-          selectedVoice = voices.find(v => v.name.includes('David') || v.name.includes('Male') || v.name.includes('George') || v.name.includes('Daniel'));
-          utterance.pitch = 0.8;
-          utterance.rate = 1.0;
-        } else {
-          // Aggressive female voice matching
-          selectedVoice = voices.find(v =>
-            v.name.includes('Zira') ||
-            v.name.includes('Samantha') ||
-            v.name.includes('Google US English') ||
-            v.name.includes('Female') ||
-            v.name.includes('Hazel') ||
-            v.name.includes('Victoria')
-          );
-          utterance.pitch = 1.3;
-          utterance.rate = 1.05;
-        }
-
-        if (selectedVoice) {
-          utterance.voice = selectedVoice;
-        }
-      }
-
-      window.speechSynthesis.speak(utterance);
-    };
-
-    // Chrome bug workaround: getVoices() is often empty on immediate call
-    if (window.speechSynthesis.getVoices().length === 0) {
-      setTimeout(setVoiceAndSpeak, 100);
-    } else {
-      setVoiceAndSpeak();
-    }
+    window.speechSynthesis.speak(utterance);
   };
 
   const handleVoiceInput = () => {
@@ -129,7 +77,7 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
   return (
     <div className="max-w-7xl mx-auto py-12 px-6">
       <div className="grid lg:grid-cols-12 gap-8 items-start">
-
+        
         {/* Left: AI Avatar & Status */}
         <div className="lg:col-span-4 space-y-6 sticky top-24">
           <Card className="p-0 overflow-hidden border-none shadow-2xl relative group" hover={false}>
@@ -141,19 +89,19 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
                 </span>
               </div>
             </div>
-
+            
             {/* AI Interrogator Video/Image */}
             <div className="relative aspect-[4/5] bg-gray-900 overflow-hidden">
-              <video
+               <video 
                 key={setupData?.agent?.video || '/female-ai.mp4'}
-                src={setupData?.agent?.video || '/female-ai.mp4'}
-                autoPlay
-                loop
-                muted
+                src={setupData?.agent?.video || '/female-ai.mp4'} 
+                autoPlay 
+                loop 
+                muted 
                 playsInline
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 poster={setupData?.agent?.poster || "/ai_interviewer_female.png"}
-              />
+               />
               <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-gray-900 to-transparent">
                 <h3 className="text-white text-xl font-black">{setupData?.agent?.name || 'Sarah AI'}</h3>
                 <p className="text-white/70 text-xs font-bold uppercase tracking-widest">{setupData?.agent?.role || 'Senior Technical Recruiter'}</p>
@@ -222,8 +170,8 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
                       <h4 className="font-bold text-sm">Advanced Skill Assessment</h4>
                     </div>
                   </div>
-
-                  <button
+                  
+                  <button 
                     onClick={() => speakQuestion(allQuestions[currentIdx])}
                     className="flex items-center gap-2 bg-gray-50 hover:bg-primary/5 text-primary px-4 py-2 rounded-full transition-all border border-gray-100 group"
                   >
@@ -244,7 +192,7 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
                     <MessageCircle className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-widest">Your Professional Answer</span>
                   </div>
-                  <textarea
+                  <textarea 
                     value={currentAnswer}
                     onChange={(e) => setCurrentAnswer(e.target.value)}
                     placeholder="Provide your detailed answer here. You can speak or type..."
@@ -253,18 +201,19 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
                 </div>
 
                 <div className="mt-10 flex flex-col sm:flex-row justify-between items-center gap-6">
-                  <button
+                  <button 
                     onClick={handleVoiceInput}
-                    className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all font-black text-sm border-2 ${isListening
-                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                    className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all font-black text-sm border-2 ${
+                      isListening 
+                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' 
                         : 'bg-white text-text-muted border-gray-100 hover:border-primary/30 hover:text-primary'
-                      }`}
+                    }`}
                   >
                     <Mic className={`w-5 h-5 ${isListening ? 'animate-pulse' : ''}`} />
                     {isListening ? 'LISTENING...' : 'START VOICE INPUT'}
                   </button>
-
-                  <Button
+                  
+                  <Button 
                     onClick={handleSubmit}
                     disabled={!currentAnswer.trim() || isListening}
                     className="w-full sm:w-auto px-12 py-5 text-lg group shadow-xl shadow-primary/30"
