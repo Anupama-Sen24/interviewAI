@@ -12,6 +12,14 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
   const [timeLeft, setTimeLeft] = useState(60);
   const [isListening, setIsListening] = useState(false);
   
+  // Prime speech synthesis on mount
+  useEffect(() => {
+    window.speechSynthesis.getVoices();
+    // Some browsers need a "wake up" call
+    const utterance = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(utterance);
+  }, []);
+  
   // Support both new flat array and old technical/hr structure for backward compatibility
   const allQuestions = Array.isArray(questions) ? questions : [...(questions.technical || []), ...(questions.hr || [])];
 
@@ -26,16 +34,72 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
 
   // Speak question when it changes
   useEffect(() => {
-    if (allQuestions[currentIdx]) {
-      speakQuestion(allQuestions[currentIdx]);
+    const handleVoices = () => {
+      if (allQuestions[currentIdx]) {
+        speakQuestion(allQuestions[currentIdx]);
+      }
+    };
+
+    // Chrome needs this event to load voices
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = handleVoices;
+    } else {
+      handleVoices();
     }
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
   }, [currentIdx]);
 
   const speakQuestion = (text) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.1;
-    utterance.pitch = 1;
+    
+    // Get available voices
+    const voices = window.speechSynthesis.getVoices();
+    const agentName = setupData?.agent?.name || 'Sarah AI';
+    
+    // Attempt to find a suitable voice
+    let selectedVoice = null;
+    
+    // Sort voices to prioritize higher quality ones
+    const sortedVoices = [...voices].sort((a, b) => {
+      if (a.localService && !b.localService) return -1;
+      if (b.localService && !a.localService) return 1;
+      return 0;
+    });
+
+    if (agentName.toLowerCase().includes('sarah')) {
+      // Extensive search for female-sounding voices
+      selectedVoice = sortedVoices.find(v => 
+        (v.name.includes('Female') || v.name.includes('Google US English') || v.name.includes('Samantha') || 
+         v.name.includes('Victoria') || v.name.includes('Microsoft Zira') || v.name.includes('Google UK English Female')) && 
+        v.lang.startsWith('en')
+      );
+      utterance.pitch = 1.15; // Slightly higher
+      utterance.rate = 1.0;
+    } else {
+      // Extensive search for male-sounding voices
+      selectedVoice = sortedVoices.find(v => 
+        (v.name.includes('Male') || v.name.includes('Google UK English Male') || v.name.includes('Daniel') || 
+         v.name.includes('Alex') || v.name.includes('Microsoft David') || v.name.includes('Google US English Male')) && 
+        v.lang.startsWith('en')
+      );
+      utterance.pitch = 0.85; // Slightly lower
+      utterance.rate = 0.95;
+    }
+
+    // Final fallback: just pick any English voice if specific ones aren't found
+    if (!selectedVoice) {
+      selectedVoice = voices.find(v => v.lang.startsWith('en'));
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      console.log(`🎙️ Selected Voice: ${selectedVoice.name}`);
+    }
+    
     window.speechSynthesis.speak(utterance);
   };
 

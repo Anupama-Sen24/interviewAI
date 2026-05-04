@@ -54,7 +54,9 @@ const Home = () => {
             <div className="mt-12 flex items-center gap-6">
               <div className="flex -space-x-3">
                 {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-200" />
+                  <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-200 overflow-hidden shadow-sm hover:scale-110 hover:z-10 transition-transform cursor-pointer">
+                    <img src={`/user_avatar_${i}.png`} alt={`Student ${i}`} className="w-full h-full object-cover" />
+                  </div>
                 ))}
               </div>
               <p className="text-sm font-bold text-text-muted">
