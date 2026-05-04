@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Send, Timer, Brain, Volume2, Sparkles, User, MessageCircle } from 'lucide-react';
 import Button from './ui/Button';
@@ -11,6 +11,8 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
   const [currentAnswer, setCurrentAnswer] = useState('');
   const [timeLeft, setTimeLeft] = useState(60);
   const [isListening, setIsListening] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const videoRef = useRef(null);
   
   // Prime speech synthesis on mount
   useEffect(() => {
@@ -99,6 +101,24 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
       utterance.voice = selectedVoice;
       console.log(`🎙️ Selected Voice: ${selectedVoice.name}`);
     }
+
+    utterance.onstart = () => {
+      setIsAISpeaking(true);
+      if (videoRef.current) videoRef.current.play();
+    };
+
+    utterance.onend = () => {
+      setIsAISpeaking(false);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+      }
+    };
+
+    utterance.onerror = () => {
+      setIsAISpeaking(false);
+      if (videoRef.current) videoRef.current.pause();
+    };
     
     window.speechSynthesis.speak(utterance);
   };
@@ -147,25 +167,25 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
           <Card className="p-0 overflow-hidden border-none shadow-2xl relative group" hover={false}>
             <div className="absolute top-4 left-4 z-10">
               <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg border border-white/20">
-                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-primary animate-ping' : 'bg-success animate-pulse'}`} />
+                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-primary animate-ping' : isAISpeaking ? 'bg-primary animate-pulse' : 'bg-success animate-pulse'}`} />
                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-800">
-                  {isListening ? 'Listening...' : 'AI Active'}
+                  {isListening ? 'Listening...' : isAISpeaking ? 'Speaking...' : 'AI Active'}
                 </span>
               </div>
             </div>
             
             {/* AI Interrogator Video/Image */}
             <div className="relative aspect-[4/5] bg-gray-900 overflow-hidden">
-               <video 
-                key={setupData?.agent?.video || '/female-ai.mp4'}
-                src={setupData?.agent?.video || '/female-ai.mp4'} 
-                autoPlay 
-                loop 
-                muted 
-                playsInline
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                poster={setupData?.agent?.poster || "/ai_interviewer_female.png"}
-               />
+                <video 
+                 ref={videoRef}
+                 key={setupData?.agent?.video || '/female-ai.mp4'}
+                 src={setupData?.agent?.video || '/female-ai.mp4'} 
+                 loop 
+                 muted 
+                 playsInline
+                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                 poster={setupData?.agent?.poster || "/ai_interviewer_female.png"}
+                />
               <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-gray-900 to-transparent">
                 <h3 className="text-white text-xl font-black">{setupData?.agent?.name || 'Sarah AI'}</h3>
                 <p className="text-white/70 text-xs font-bold uppercase tracking-widest">{setupData?.agent?.role || 'Senior Technical Recruiter'}</p>
@@ -296,4 +316,6 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
 };
 
 export default MockInterview;
+
+
 
