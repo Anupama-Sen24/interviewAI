@@ -14,99 +14,87 @@ let openai;
 let isOpenRouter = false;
 
 const initAI = () => {
-  if (GEMINI_API_KEY && !model) {
-    console.log("🔑 Gemini Key detected (Length:", GEMINI_API_KEY.length, ")");
-    genAI = new GoogleGenerativeAI(GEMINI_API_KEY.trim());
-    model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    console.log("✨ Google Gemini Model Initialized");
-    isOpenRouter = false;
-  } else if (OPENROUTER_API_KEY && !openai) {
+  if (OPENROUTER_API_KEY && !openai) {
     console.log("🚀 OpenRouter Key detected (Length:", OPENROUTER_API_KEY.length, ")");
     openai = new OpenAI({ 
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: OPENROUTER_API_KEY 
     });
     isOpenRouter = true;
-  } else if (OPENAI_API_KEY && !openai) {
+  } else if (GEMINI_API_KEY && !model && !isOpenRouter) {
+    console.log("🔑 Gemini Key detected (Length:", GEMINI_API_KEY.length, ")");
+    genAI = new GoogleGenerativeAI(GEMINI_API_KEY.trim());
+    model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    console.log("✨ Google Gemini Model Initialized");
+  } else if (OPENAI_API_KEY && !openai && !isOpenRouter) {
     openai = new OpenAI({ apiKey: OPENAI_API_KEY });
     console.log("🤖 OpenAI Initialized");
-    isOpenRouter = false;
   }
 };
 
 initAI();
 
-const callAI = async (messages, responseType = "text") => {
-  initAI();
-  
-  // 1. Try Direct Gemini First (Free tier)
-  if (GEMINI_API_KEY) {
-    try {
-      console.log("尝试使用 Direct Gemini...");
-      const combinedText = messages.map(m => m.content).join('\n\n');
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: combinedText }] }],
-        generationConfig: responseType === "json" ? { responseMimeType: "application/json" } : {}
-      });
-      return result.response.text();
-    } catch (err) {
-      console.error("❌ Direct Gemini Failed:", err.message);
-    }
-  }
-
-  // 2. Try OpenRouter (with free models)
-  if (OPENROUTER_API_KEY) {
-    const freeModels = ["google/gemini-2.0-flash-001", "google/gemini-2.0-flash-exp:free", "mistralai/mistral-7b-instruct:free"];
-    for (const m of freeModels) {
-      try {
-        console.log(`尝试使用 OpenRouter 模型: ${m}...`);
-        const response = await openai.chat.completions.create({
-          model: m,
-          messages: messages,
-          response_format: responseType === "json" ? { type: "json_object" } : undefined
-        });
-        return response.choices[0].message.content;
-      } catch (err) {
-        console.error(`❌ OpenRouter ${m} Failed:`, err.message);
-      }
-    }
-  }
-
-  // 3. Try Direct OpenAI (Last resort)
-  if (OPENAI_API_KEY && !isOpenRouter) {
-    try {
-      console.log("尝试使用 Direct OpenAI...");
-      const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: messages,
-        response_format: responseType === "json" ? { type: "json_object" } : undefined
-      });
-      return response.choices[0].message.content;
-    } catch (err) {
-      console.error("❌ Direct OpenAI Failed:", err.message);
-    }
-  }
-
-  throw new Error("All AI providers failed. Please check your API keys and quotas.");
-};
-
 const extractResumeData = async (resumeText) => {
+  initAI();
   const messages = [
     {
       role: "system",
-      content: "Extract structured data from resume. Also perform an ATS analysis. Return strictly JSON: { \"role\": \"string\", \"experience\": \"string\", \"projects\": [\"string\"], \"skills\": [\"string\"], \"atsScore\": number, \"atsFeedback\": \"string\" }"
+      content: `
+Extract structured data from resume.
+Also perform an ATS (Applicant Tracking System) compatibility analysis.
+Evaluate if the resume is well-structured, uses standard headings, and is text-based.
+
+Return strictly JSON:
+
+{
+  "role": "string",
+  "experience": "string",
+  "projects": ["project1", "project2"],
+  "skills": ["skill1", "skill2"],
+  "atsScore": number,
+  "atsFeedback": "short feedback on ATS readability"
+}
+`
     },
-    { role: "user", content: resumeText }
+    {
+      role: "user",
+      content: resumeText
+    }
   ];
 
   try {
-    const text = await callAI(messages, "json");
-    console.log("✅ AI Response Received");
+    let text;
+    if (isOpenRouter && openai) {
+      const response = await openai.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: messages,
+      });
+      text = response.choices[0].message.content;
+    } else if (OPENAI_API_KEY && openai) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: messages,
+      });
+      text = response.choices[0].message.content;
+    } else if (GEMINI_API_KEY && model) {
+      const combinedText = messages.map(m => m.content).join('\n\n');
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: combinedText }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      });
+      text = result.response.text();
+    } else {
+      throw new Error('No AI provider configured');
+    }
+    
+    console.log("Raw AI Output:", text);
     const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+    const finalJsonString = jsonMatch ? jsonMatch[0] : cleaned;
+    
+    return JSON.parse(finalJsonString);
   } catch (error) {
-    console.error("Extraction Error:", error.message);
+    console.error("Extraction Error details:", error.message);
     return { 
       role: "Candidate", 
       experience: "Professional Experience", 
@@ -119,60 +107,199 @@ const extractResumeData = async (resumeText) => {
 };
 
 const generateQuestions = async (data, resumeText, mode = "Technical") => {
+  initAI();
   const { role, experience, projects, skills } = data;
-  const userPrompt = `Role:${role}, Experience:${experience}, Mode:${mode}, Projects:${projects.join(", ")}, Skills:${skills.join(", ")}, Resume:${resumeText.substring(0, 2000)}`;
+  const projectText = projects.join(", ");
+  const skillsText = skills.join(", ");
+  const safeResume = resumeText.substring(0, 2000);
+
+  const userPrompt = `
+    Role:${role}
+    Experience:${experience}
+    InterviewMode:${mode}
+    Projects:${projectText}
+    Skills:${skillsText},
+    Resume:${safeResume}
+    `;
 
   const messages = [
     {
       role: "system",
-      content: "Generate 5 interview questions. One per line. No numbering. Simple English."
+      content: `
+You are a real human interviewer conducting a professional interview.
+
+Speak in simple, natural English as if you are directly talking to the candidate.
+
+Generate exactly 5 interview questions.
+
+Strict Rules:
+- Each question must contain between 15 and 25 words.
+- Each question must be a single complete sentence.
+- Do NOT number them.
+- Do NOT add explanations.
+- Do NOT add extra text before or after.
+- One question per line only.
+- Keep language simple and conversational.
+- Questions must feel practical and realistic.
+
+Difficulty progression:
+Question 1 → easy  
+Question 2 → easy  
+Question 3 → medium  
+Question 4 → medium  
+Question 5 → hard  
+
+Make questions based on the candidate’s role, experience,interviewMode, projects, skills, and resume details.
+`
     },
-    { role: "user", content: userPrompt }
+    {
+      role: "user",
+      content: userPrompt
+    }
   ];
 
   try {
-    const text = await callAI(messages);
-    return text.split('\n').filter(q => q.trim().length > 10).slice(0, 5);
+    let text;
+    if (isOpenRouter && openai) {
+      const response = await openai.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: messages,
+      });
+      text = response.choices[0].message.content;
+    } else if (OPENAI_API_KEY && openai) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: messages,
+      });
+      text = response.choices[0].message.content;
+    } else if (GEMINI_API_KEY && model) {
+      const combinedText = messages.map(m => m.content).join('\n\n');
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: combinedText }] }]
+      });
+      text = result.response.text();
+    } else {
+      throw new Error('No AI provider configured');
+    }
+    
+    const questions = text.split('\n').filter(q => q.trim().length > 10).slice(0, 5);
+    return questions;
   } catch (error) {
-    console.error("Question Generation Error:", error.message);
+    console.error("Question Generation Error:", error);
     return [
-      "Can you describe your most significant technical achievement?",
-      "How do you typically approach learning a new technology?",
-      "Tell me about a time you had to troubleshoot a complex issue.",
-      "What are the most important factors for team collaboration?",
-      "How do you ensure the quality of the software you develop?"
+      "Can you describe your most significant technical achievement and the impact it had?",
+      "How do you typically approach learning a new technology or framework for a project?",
+      "Tell me about a time you had to troubleshoot a complex technical issue under pressure.",
+      "In your experience, what are the most important factors for successful team collaboration?",
+      "How do you ensure the quality and reliability of the software you develop?"
     ];
   }
 };
 
 const evaluateSingleAnswer = async (question, answer) => {
+  initAI();
   const messages = [
     {
       role: "system",
-      content: "Evaluate answer. Return JSON: { \"confidence\": number, \"communication\": number, \"correctness\": number, \"finalScore\": number, \"feedback\": \"string\" }"
+      content: `
+You are a professional human interviewer evaluating a candidate's answer in a real interview.
+
+Evaluate naturally and fairly, like a real person would.
+
+Score the answer in these areas (0 to 10):
+
+1. Confidence – Does the answer sound clear, confident, and well-presented?
+2. Communication – Is the language simple, clear, and easy to understand?
+3. Correctness – Is the answer accurate, relevant, and complete?
+
+Rules:
+- Be realistic and unbiased.
+- Do not give random high scores.
+- If the answer is weak, score low.
+- If the answer is strong and detailed, score high.
+- Consider clarity, structure, and relevance.
+
+Calculate:
+finalScore = average of confidence, communication, and correctness (rounded to nearest whole number).
+
+Feedback Rules:
+- Write natural human feedback.
+- 10 to 15 words only.
+- Sound like real interview feedback.
+- Can suggest improvement if needed.
+- Do NOT repeat the question.
+- Do NOT explain scoring.
+- Keep tone professional and honest.
+
+Return ONLY valid JSON in this format:
+
+{
+  "confidence": number,
+  "communication": number,
+  "correctness": number,
+  "finalScore": number,
+  "feedback": "short human feedback"
+}
+`
     },
-    { role: "user", content: `Q: ${question}\nA: ${answer}` }
+    {
+      role: "user",
+      content: `
+Question: ${question}
+Answer: ${answer}
+`
+    }
   ];
 
   try {
-    const text = await callAI(messages, "json");
+    let text;
+    if (isOpenRouter && openai) {
+      const response = await openai.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: messages,
+      });
+      text = response.choices[0].message.content;
+    } else if (OPENAI_API_KEY && openai) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: messages,
+        response_format: { type: "json_object" },
+      });
+      text = response.choices[0].message.content;
+    } else if (GEMINI_API_KEY && model) {
+      const combinedText = messages.map(m => m.content).join('\n\n');
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: combinedText }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      });
+      text = result.response.text();
+    } else {
+      throw new Error('No AI provider configured');
+    }
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(cleaned);
   } catch (error) {
-    return { confidence: 7, communication: 7, correctness: 7, finalScore: 7, feedback: "Good effort, keep practicing." };
+    console.error("Evaluation Error:", error);
+    return { confidence: 7, communication: 7, correctness: 7, finalScore: 7, feedback: "Good effort, keep practicing for more clarity." };
   }
 };
 
+
 const evaluateInterview = async (answers) => {
+  // This is now a wrapper that evaluates each answer individually or as a batch
   const results = await Promise.all(answers.map(a => evaluateSingleAnswer(a.question, a.answer)));
-  const avg = (arr) => (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1);
+  
+  const totalConfidence = results.reduce((sum, r) => sum + r.confidence, 0);
+  const totalCommunication = results.reduce((sum, r) => sum + r.communication, 0);
+  const totalCorrectness = results.reduce((sum, r) => sum + r.correctness, 0);
+  const totalFinal = results.reduce((sum, r) => sum + r.finalScore, 0);
   
   return {
-    overallScore: avg(results.map(r => r.finalScore)),
+    overallScore: (totalFinal / results.length).toFixed(1),
     skills: {
-      confidence: avg(results.map(r => r.confidence)),
-      communication: avg(results.map(r => r.communication)),
-      correctness: avg(results.map(r => r.correctness))
+      confidence: (totalConfidence / results.length).toFixed(1),
+      communication: (totalCommunication / results.length).toFixed(1),
+      correctness: (totalCorrectness / results.length).toFixed(1)
     },
     breakdown: answers.map((a, i) => ({
       question: a.question,

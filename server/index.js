@@ -19,10 +19,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
 }
 
 // Middleware
-app.use(cors({
-  origin: ['https://interviewai-1client.onrender.com', 'http://localhost:5173'],
-  credentials: true
-}));
+app.use(cors());
 app.use(express.json());
 
 // MongoDB Connection
