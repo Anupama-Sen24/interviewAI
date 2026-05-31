@@ -2,7 +2,7 @@ import axios from 'axios';
 import { auth } from '../firebase';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://interviewai-1client.onrender.com/api',
+  baseURL: 'http://localhost:5000/api',
 });
 
 api.interceptors.request.use(async (config) => {

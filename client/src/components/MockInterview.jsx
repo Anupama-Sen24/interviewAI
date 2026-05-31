@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Send, Timer, Brain, Volume2, Sparkles, User, MessageCircle } from 'lucide-react';
 import Button from './ui/Button';
@@ -11,16 +11,6 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
   const [currentAnswer, setCurrentAnswer] = useState('');
   const [timeLeft, setTimeLeft] = useState(60);
   const [isListening, setIsListening] = useState(false);
-  const [isAISpeaking, setIsAISpeaking] = useState(false);
-  const videoRef = useRef(null);
-  
-  // Prime speech synthesis on mount
-  useEffect(() => {
-    window.speechSynthesis.getVoices();
-    // Some browsers need a "wake up" call
-    const utterance = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(utterance);
-  }, []);
   
   // Support both new flat array and old technical/hr structure for backward compatibility
   const allQuestions = Array.isArray(questions) ? questions : [...(questions.technical || []), ...(questions.hr || [])];
@@ -34,92 +24,27 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
     }
   }, [timeLeft]);
 
-  // Speak question when it changes
+  // Speak the FIRST question on initial mount
   useEffect(() => {
-    const handleVoices = () => {
-      if (allQuestions[currentIdx]) {
-        speakQuestion(allQuestions[currentIdx]);
-      }
-    };
-
-    // Chrome needs this event to load voices
-    if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.onvoiceschanged = handleVoices;
-    } else {
-      handleVoices();
+    if (allQuestions[0]) {
+      // Small delay to ensure browser speech synthesis is ready
+      const timer = setTimeout(() => speakQuestion(allQuestions[0]), 800);
+      return () => clearTimeout(timer);
     }
+  }, []);
 
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
+  // Speak question when it changes (subsequent questions)
+  useEffect(() => {
+    if (currentIdx > 0 && allQuestions[currentIdx]) {
+      speakQuestion(allQuestions[currentIdx]);
+    }
   }, [currentIdx]);
 
   const speakQuestion = (text) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Get available voices
-    const voices = window.speechSynthesis.getVoices();
-    const agentName = setupData?.agent?.name || 'Sarah AI';
-    
-    // Attempt to find a suitable voice
-    let selectedVoice = null;
-    
-    // Sort voices to prioritize higher quality ones
-    const sortedVoices = [...voices].sort((a, b) => {
-      if (a.localService && !b.localService) return -1;
-      if (b.localService && !a.localService) return 1;
-      return 0;
-    });
-
-    if (agentName.toLowerCase().includes('sarah')) {
-      // Extensive search for female-sounding voices
-      selectedVoice = sortedVoices.find(v => 
-        (v.name.includes('Female') || v.name.includes('Google US English') || v.name.includes('Samantha') || 
-         v.name.includes('Victoria') || v.name.includes('Microsoft Zira') || v.name.includes('Google UK English Female')) && 
-        v.lang.startsWith('en')
-      );
-      utterance.pitch = 1.15; // Slightly higher
-      utterance.rate = 1.0;
-    } else {
-      // Extensive search for male-sounding voices
-      selectedVoice = sortedVoices.find(v => 
-        (v.name.includes('Male') || v.name.includes('Google UK English Male') || v.name.includes('Daniel') || 
-         v.name.includes('Alex') || v.name.includes('Microsoft David') || v.name.includes('Google US English Male')) && 
-        v.lang.startsWith('en')
-      );
-      utterance.pitch = 0.85; // Slightly lower
-      utterance.rate = 0.95;
-    }
-
-    // Final fallback: just pick any English voice if specific ones aren't found
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.lang.startsWith('en'));
-    }
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-      console.log(`🎙️ Selected Voice: ${selectedVoice.name}`);
-    }
-
-    utterance.onstart = () => {
-      setIsAISpeaking(true);
-      if (videoRef.current) videoRef.current.play();
-    };
-
-    utterance.onend = () => {
-      setIsAISpeaking(false);
-      if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.currentTime = 0;
-      }
-    };
-
-    utterance.onerror = () => {
-      setIsAISpeaking(false);
-      if (videoRef.current) videoRef.current.pause();
-    };
-    
+    utterance.rate = 1.1;
+    utterance.pitch = 1;
     window.speechSynthesis.speak(utterance);
   };
 
@@ -167,25 +92,25 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
           <Card className="p-0 overflow-hidden border-none shadow-2xl relative group" hover={false}>
             <div className="absolute top-4 left-4 z-10">
               <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg border border-white/20">
-                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-primary animate-ping' : isAISpeaking ? 'bg-primary animate-pulse' : 'bg-success animate-pulse'}`} />
+                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-primary animate-ping' : 'bg-success animate-pulse'}`} />
                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-800">
-                  {isListening ? 'Listening...' : isAISpeaking ? 'Speaking...' : 'AI Active'}
+                  {isListening ? 'Listening...' : 'AI Active'}
                 </span>
               </div>
             </div>
             
             {/* AI Interrogator Video/Image */}
             <div className="relative aspect-[4/5] bg-gray-900 overflow-hidden">
-                <video 
-                 ref={videoRef}
-                 key={setupData?.agent?.video || '/female-ai.mp4'}
-                 src={setupData?.agent?.video || '/female-ai.mp4'} 
-                 loop 
-                 muted 
-                 playsInline
-                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                 poster={setupData?.agent?.poster || "/ai_interviewer_female.png"}
-                />
+               <video 
+                key={setupData?.agent?.video || '/female-ai.mp4'}
+                src={setupData?.agent?.video || '/female-ai.mp4'} 
+                autoPlay 
+                loop 
+                muted 
+                playsInline
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                poster={setupData?.agent?.poster || "/ai_interviewer_female.png"}
+               />
               <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-gray-900 to-transparent">
                 <h3 className="text-white text-xl font-black">{setupData?.agent?.name || 'Sarah AI'}</h3>
                 <p className="text-white/70 text-xs font-bold uppercase tracking-widest">{setupData?.agent?.role || 'Senior Technical Recruiter'}</p>
