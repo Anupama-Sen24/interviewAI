@@ -45,10 +45,6 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
   const speakQuestion = (text) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-<<<<<<< HEAD
-    utterance.rate = 1.1;
-    utterance.pitch = 1;
-=======
     
     // Get available voices
     const voices = window.speechSynthesis.getVoices();
@@ -112,7 +108,6 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
       if (videoRef.current) videoRef.current.pause();
     };
     
->>>>>>> c7a764028cd3232b26c1c320bfb636488227cff6
     window.speechSynthesis.speak(utterance);
   };
 
