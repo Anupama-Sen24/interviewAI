@@ -44,71 +44,76 @@ const MockInterview = ({ questions, setupData, onComplete }) => {
 
   const speakQuestion = (text) => {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Get available voices
-    const voices = window.speechSynthesis.getVoices();
-    const agentName = setupData?.agent?.name || 'Sarah AI';
-    
-    // Attempt to find a suitable voice
-    let selectedVoice = null;
-    
-    // Sort voices to prioritize higher quality ones
-    const sortedVoices = [...voices].sort((a, b) => {
-      if (a.localService && !b.localService) return -1;
-      if (b.localService && !a.localService) return 1;
-      return 0;
-    });
 
-    if (agentName.toLowerCase().includes('sarah')) {
-      // Extensive search for female-sounding voices
-      selectedVoice = sortedVoices.find(v => 
-        (v.name.includes('Female') || v.name.includes('Google US English') || v.name.includes('Samantha') || 
-         v.name.includes('Victoria') || v.name.includes('Microsoft Zira') || v.name.includes('Google UK English Female')) && 
-        v.lang.startsWith('en')
-      );
-      utterance.pitch = 1.15; // Slightly higher
-      utterance.rate = 1.0;
-    } else {
-      // Extensive search for male-sounding voices
-      selectedVoice = sortedVoices.find(v => 
-        (v.name.includes('Male') || v.name.includes('Google UK English Male') || v.name.includes('Daniel') || 
-         v.name.includes('Alex') || v.name.includes('Microsoft David') || v.name.includes('Google US English Male')) && 
-        v.lang.startsWith('en')
-      );
-      utterance.pitch = 0.85; // Slightly lower
-      utterance.rate = 0.95;
-    }
+    const doSpeak = (voices) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const agentName = setupData?.agent?.name || 'Sarah AI';
+      let selectedVoice = null;
 
-    // Final fallback: just pick any English voice if specific ones aren't found
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.lang.startsWith('en'));
-    }
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-      console.log(`🎙️ Selected Voice: ${selectedVoice.name}`);
-    }
-
-    utterance.onstart = () => {
-      setIsAISpeaking(true);
-      if (videoRef.current) videoRef.current.play();
-    };
-
-    utterance.onend = () => {
-      setIsAISpeaking(false);
-      if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.currentTime = 0;
+      if (agentName.toLowerCase().includes('sarah')) {
+        // Female voice for Sarah AI
+        selectedVoice = voices.find(v =>
+          v.lang.startsWith('en') &&
+          (v.name.includes('Female') || v.name.includes('Google UK English Female') ||
+           v.name.includes('Samantha') || v.name.includes('Victoria') ||
+           v.name.includes('Microsoft Zira') || v.name.includes('Karen') ||
+           v.name.includes('Moira') || v.name.includes('Tessa'))
+        );
+        utterance.pitch = 1.2;
+        utterance.rate = 1.0;
+      } else {
+        // Male voice for Mark AI
+        selectedVoice = voices.find(v =>
+          v.lang.startsWith('en') &&
+          (v.name.includes('Male') || v.name.includes('Google UK English Male') ||
+           v.name.includes('Daniel') || v.name.includes('Alex') ||
+           v.name.includes('Microsoft David') || v.name.includes('Fred') ||
+           v.name.includes('Bruce') || v.name.includes('Tom'))
+        );
+        utterance.pitch = 0.85;
+        utterance.rate = 0.95;
       }
+
+      // Fallback: any English voice
+      if (!selectedVoice) {
+        selectedVoice = voices.find(v => v.lang.startsWith('en'));
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        console.log(`🎙️ Using voice: ${selectedVoice.name}`);
+      }
+
+      utterance.onstart = () => {
+        setIsAISpeaking(true);
+        if (videoRef.current) videoRef.current.play();
+      };
+      utterance.onend = () => {
+        setIsAISpeaking(false);
+        if (videoRef.current) {
+          videoRef.current.pause();
+          videoRef.current.currentTime = 0;
+        }
+      };
+      utterance.onerror = () => {
+        setIsAISpeaking(false);
+        if (videoRef.current) videoRef.current.pause();
+      };
+
+      window.speechSynthesis.speak(utterance);
     };
 
-    utterance.onerror = () => {
-      setIsAISpeaking(false);
-      if (videoRef.current) videoRef.current.pause();
-    };
-    
-    window.speechSynthesis.speak(utterance);
+    // Voices are loaded asynchronously — wait for them if not ready
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      doSpeak(voices);
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        const loadedVoices = window.speechSynthesis.getVoices();
+        doSpeak(loadedVoices);
+        window.speechSynthesis.onvoiceschanged = null; // clear after first use
+      };
+    }
   };
 
   const handleVoiceInput = () => {
