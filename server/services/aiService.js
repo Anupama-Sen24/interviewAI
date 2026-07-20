@@ -86,10 +86,10 @@ Return strictly JSON:
       text = response.choices[0].message.content;
     } else if (GEMINI_API_KEY && model) {
       const combinedText = messages.map(m => m.content).join('\n\n');
-      const result = await retryWithBackoff(() => model.generateContent({
+      const result = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: combinedText }] }],
         generationConfig: { responseMimeType: "application/json" }
-      }));
+      });
       text = result.response.text();
     } else {
       throw new Error('No AI provider configured');
@@ -181,9 +181,9 @@ Make all 25 questions based on the candidate's role, experience, interviewMode, 
       text = response.choices[0].message.content;
     } else if (GEMINI_API_KEY && model) {
       const combinedText = messages.map(m => m.content).join('\n\n');
-      const result = await retryWithBackoff(() => model.generateContent({
+      const result = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: combinedText }] }]
-      }));
+      });
       text = result.response.text();
     } else {
       throw new Error('No AI provider configured');
@@ -251,6 +251,37 @@ const retryWithBackoff = async (fn, retries = 4, delayMs = 1000) => {
       }
     }
   }
+};
+
+// Preview/newest Gemini models sometimes stay overloaded (503) for extended
+// windows regardless of retries. Rather than retrying the same saturated
+// model forever, fall through to a more available, established model.
+const GEMINI_MODEL_CHAIN = ['gemini-3.5-flash', 'gemini-2.5-flash-lite'];
+const geminiModelCache = {};
+
+const getGeminiModel = (modelName) => {
+  if (!geminiModelCache[modelName]) {
+    geminiModelCache[modelName] = genAI.getGenerativeModel({ model: modelName });
+  }
+  return geminiModelCache[modelName];
+};
+
+const generateGeminiContent = async (requestParams) => {
+  let lastErr;
+  for (const modelName of GEMINI_MODEL_CHAIN) {
+    try {
+      const m = getGeminiModel(modelName);
+      // Short retry budget per model — the fallback to the next model is
+      // the real defense against sustained overload, not endless retries
+      // on one saturated model.
+      const result = await retryWithBackoff(() => m.generateContent(requestParams), 2, 1000);
+      return result;
+    } catch (err) {
+      console.warn(`⚠️ ${modelName} unavailable, trying next model in chain...`);
+      lastErr = err;
+    }
+  }
+  throw lastErr;
 };
 
 // Evaluate a list of items with concurrency limit to avoid rate limits
@@ -342,7 +373,7 @@ Answer: ${answer}
       text = response.choices[0].message.content;
     } else if (GEMINI_API_KEY && model) {
       const combinedText = messages.map(m => m.content).join('\n\n');
-      const result = await model.generateContent({
+      const result = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: combinedText }] }],
         generationConfig: { responseMimeType: "application/json" }
       });
