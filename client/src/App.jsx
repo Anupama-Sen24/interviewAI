@@ -109,10 +109,14 @@ const InterviewWrapper = ({ onComplete }) => {
 
   if (!questions) return <Navigate to="/dashboard" />;
 
+  // Slice to the number of questions the user selected (defaults to all if not set)
+  const count = setupData?.questionCount || questions.length;
+  const slicedQuestions = questions.slice(0, count);
+
   return (
     <div className="pt-32 pb-20">
       <MockInterview 
-        questions={questions} 
+        questions={slicedQuestions} 
         setupData={setupData} 
         onComplete={(answers) => onComplete(answers, navigate)} 
       />

@@ -9,6 +9,7 @@ const InterviewSetup = ({ data, onStart }) => {
   const [description, setDescription] = useState(data?.experience || "Looking for frontend developer role to build websites.");
   const [sessionType, setSessionType] = useState("Technical Interview");
   const [selectedAgent, setSelectedAgent] = useState('agent1');
+  const [questionCount, setQuestionCount] = useState(10);
 
   // Fallback for missing projects/skills
   const projects = data?.projects || [];
@@ -114,6 +115,21 @@ const InterviewSetup = ({ data, onStart }) => {
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
           </div>
+
+          {/* Question Count Dropdown */}
+          <div className="relative">
+            <select 
+              value={questionCount}
+              onChange={(e) => setQuestionCount(Number(e.target.value))}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl py-4 px-4 font-medium appearance-none focus:ring-2 ring-success/20 outline-none"
+            >
+              <option value={5}>5 Questions — Quick Practice (5 min)</option>
+              <option value={10}>10 Questions — Standard Session (10 min)</option>
+              <option value={15}>15 Questions — Extended Session (15 min)</option>
+              <option value={25}>25 Questions — Full Interview (25 min)</option>
+            </select>
+            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
         <div className="bg-success/[0.02] border border-success/10 rounded-2xl p-8 mb-10">
@@ -166,7 +182,7 @@ const InterviewSetup = ({ data, onStart }) => {
         </div>
 
         <Button 
-          onClick={() => onStart({ role, description, sessionType, agent: agents.find(a => a.id === selectedAgent) })}
+          onClick={() => onStart({ role, description, sessionType, questionCount, agent: agents.find(a => a.id === selectedAgent) })}
           className="w-full py-5 text-lg flex items-center justify-center gap-3"
         >
           <Play className="w-5 h-5 fill-current" />
