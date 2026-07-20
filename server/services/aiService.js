@@ -256,7 +256,7 @@ const retryWithBackoff = async (fn, retries = 4, delayMs = 1000) => {
 // Preview/newest Gemini models sometimes stay overloaded (503) for extended
 // windows regardless of retries. Rather than retrying the same saturated
 // model forever, fall through to a more available, established model.
-const GEMINI_MODEL_CHAIN = ['gemini-3.5-flash', 'gemini-2.5-flash-lite'];
+const GEMINI_MODEL_CHAIN = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
 const geminiModelCache = {};
 
 const getGeminiModel = (modelName) => {
