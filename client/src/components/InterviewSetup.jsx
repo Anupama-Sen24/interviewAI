@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Briefcase, ChevronDown, Mic, BarChart3, Play } from 'lucide-react';
+import { User, Briefcase, ChevronDown, Mic, BarChart3, Play, Loader2, Sparkles, Code, UserCheck, Layers } from 'lucide-react';
+import api from '../utils/api';
+import { useDispatch } from 'react-redux';
+import { setQuestions } from '../redux/slices/interviewSlice';
 import Button from './ui/Button';
 import Card from './ui/Card';
 
 const InterviewSetup = ({ data, onStart }) => {
+  const dispatch = useDispatch();
   const [role, setRole] = useState(data?.role || "Frontend Developer");
   const [description, setDescription] = useState(data?.experience || "Looking for frontend developer role to build websites.");
   const [sessionType, setSessionType] = useState("Technical Interview");
   const [selectedAgent, setSelectedAgent] = useState('agent1');
   const [questionCount, setQuestionCount] = useState(10);
+  const [loading, setLoading] = useState(false);
 
   // Fallback for missing projects/skills
   const projects = data?.projects || [];
@@ -20,6 +25,24 @@ const InterviewSetup = ({ data, onStart }) => {
     { id: 'agent2', name: 'Mark AI', role: 'HR Manager', video: '/male-ai.mp4', poster: '/ai_interviewer_male.png' }
   ];
 
+  const handleStart = async () => {
+    setLoading(true);
+    try {
+      // Regenerate questions for selected sessionType mode
+      const res = await api.post('/interview/generate-questions', {
+        extractedData: { role, experience: description, projects, skills },
+        mode: sessionType
+      });
+      if (res.data?.success && res.data?.questions) {
+        dispatch(setQuestions(res.data.questions));
+      }
+    } catch (err) {
+      console.warn("Using pre-extracted questions fallback:", err);
+    } finally {
+      setLoading(false);
+      onStart({ role, description, sessionType, questionCount, agent: agents.find(a => a.id === selectedAgent) });
+    }
+  };
 
   return (
     <Card 
@@ -29,7 +52,7 @@ const InterviewSetup = ({ data, onStart }) => {
       {/* Left Column */}
       <div className="md:w-2/5 bg-success/5 p-12 text-black text-left">
         <h2 className="text-4xl font-black mb-6 leading-tight">Start Your <br />AI Interview</h2>
-        <p className="text-gray-500 font-medium mb-12">Practice real interview scenarios powered by AI. Improve communication, technical skills, and confidence.</p>
+        <p className="text-gray-500 font-medium mb-12">Practice real interview scenarios powered by AI. Choose between HR behavioral, technical coding challenges, or full mock sessions.</p>
         
         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Choose Your Interviewer:</h4>
         <div className="grid grid-cols-2 gap-4 mb-12">
@@ -51,9 +74,9 @@ const InterviewSetup = ({ data, onStart }) => {
 
         <div className="space-y-6">
           {[
-            { id: 'role', icon: <User className="w-5 h-5" />, text: "Choose Role & Experience", desc: "Tailor questions to your target job", action: () => document.getElementById('role-input')?.focus() },
-            { id: 'voice', icon: <Mic className="w-5 h-5" />, text: "Smart Voice Interview", desc: "Real-time speech-to-text enabled", action: () => alert("Smart Voice is enabled for this session. You can speak your answers during the interview!") },
-            { id: 'stats', icon: <BarChart3 className="w-5 h-5" />, text: "Performance Analytics", desc: "Detailed post-interview reports", action: () => alert("Detailed competency reports will be generated automatically after you complete all questions.") },
+            { id: 'role', icon: <User className="w-5 h-5" />, text: "Tailored Interview Mode", desc: sessionType, action: () => document.getElementById('session-select')?.focus() },
+            { id: 'voice', icon: <Mic className="w-5 h-5" />, text: "Smart Voice & Code Editor", desc: "Real-time voice & IDE workspace", action: () => alert("Smart Voice & Code Editor are enabled for this session!") },
+            { id: 'stats', icon: <BarChart3 className="w-5 h-5" />, text: "Real-Time Diagnostic Feedback", desc: "Instant error analysis on wrong answers", action: () => alert("Instant AI error analysis will explain where your code or answers were wrong right away!") },
           ].map((item, i) => (
             <motion.div 
               key={i} 
@@ -85,7 +108,6 @@ const InterviewSetup = ({ data, onStart }) => {
               id="role-input"
               type="text" 
               value={role}
-
               onChange={(e) => setRole(e.target.value)}
               placeholder="Target Role (e.g. Frontend Developer)" 
               className="w-full bg-gray-50 border border-gray-100 rounded-xl py-4 pl-12 pr-4 font-medium focus:ring-2 ring-success/20 outline-none" 
@@ -105,13 +127,14 @@ const InterviewSetup = ({ data, onStart }) => {
 
           <div className="relative">
             <select 
+              id="session-select"
               value={sessionType}
               onChange={(e) => setSessionType(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl py-4 px-4 font-medium appearance-none focus:ring-2 ring-success/20 outline-none"
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl py-4 px-4 font-bold text-gray-800 appearance-none focus:ring-2 ring-success/20 outline-none"
             >
-              <option>Technical Interview</option>
-              <option>HR Interview</option>
-              <option>Full Mock Session</option>
+              <option value="Technical Interview">💻 Technical Interview (Coding & Output Prediction)</option>
+              <option value="HR Interview">🤝 HR Interview (Situational & Behavioral)</option>
+              <option value="Full Mock Session">🚀 Full Mock Session (Dual HR + Tech Phase)</option>
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
           </div>
@@ -126,7 +149,6 @@ const InterviewSetup = ({ data, onStart }) => {
               <option value={5}>5 Questions — Quick Practice (5 min)</option>
               <option value={10}>10 Questions — Standard Session (10 min)</option>
               <option value={15}>15 Questions — Extended Session (15 min)</option>
-              <option value={25}>25 Questions — Full Interview (25 min)</option>
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
           </div>
@@ -182,17 +204,26 @@ const InterviewSetup = ({ data, onStart }) => {
         </div>
 
         <Button 
-          onClick={() => onStart({ role, description, sessionType, questionCount, agent: agents.find(a => a.id === selectedAgent) })}
+          onClick={handleStart}
+          disabled={loading}
           className="w-full py-5 text-lg flex items-center justify-center gap-3"
         >
-          <Play className="w-5 h-5 fill-current" />
-          Start Interview
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Tailoring {sessionType} Questions...
+            </>
+          ) : (
+            <>
+              <Play className="w-5 h-5 fill-current" />
+              Start {sessionType}
+            </>
+          )}
         </Button>
 
       </div>
     </Card>
   );
 };
-
 
 export default InterviewSetup;

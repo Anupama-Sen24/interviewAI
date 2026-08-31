@@ -21,7 +21,7 @@ const initAI = () => {
   if (GEMINI_API_KEY) {
     console.log("🔑 Gemini Key detected (Length:", GEMINI_API_KEY.length, ")");
     genAI = new GoogleGenerativeAI(GEMINI_API_KEY.trim());
-    model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+    model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
     provider = 'gemini';
     console.log("✨ Google Gemini Model Initialized");
   } else if (OPENAI_API_KEY) {
@@ -114,53 +114,67 @@ Return strictly JSON:
   }
 };
 
-const generateQuestions = async (data, resumeText, mode = "Technical") => {
+const generateQuestions = async (data, resumeText, mode = "Technical Interview") => {
   initAI();
   const { role, experience, projects, skills } = data;
-  const projectText = projects.join(", ");
-  const skillsText = skills.join(", ");
-  const safeResume = resumeText.substring(0, 2000);
+  const projectText = Array.isArray(projects) ? projects.join(", ") : projects || '';
+  const skillsText = Array.isArray(skills) ? skills.join(", ") : skills || '';
+  const safeResume = (resumeText || '').substring(0, 2000);
 
-  const userPrompt = `
-    Role:${role}
-    Experience:${experience}
-    InterviewMode:${mode}
-    Projects:${projectText}
-    Skills:${skillsText},
-    Resume:${safeResume}
-    `;
+  const modeInstructions = {
+    "HR Interview": `
+Focus ONLY on HR, behavioral, situational judgment, past workplace challenges, culture fit, communication, and interpersonal scenarios.
+Do NOT include coding or deep technical implementation questions.
+All questions must have "type": "hr".
+`,
+    "Technical Interview": `
+Focus heavily on real-world technical interview questions:
+- Core technical concepts & architecture.
+- Previous job/internship technical challenges.
+- Coding challenges (marked with "type": "coding") with a starter code snippet template in "codeSnippet".
+- Code output prediction challenges (marked with "type": "output_prediction") with the code snippet to evaluate in "codeSnippet".
+Include a good balance of conceptual technical questions (30%), coding tasks (40%), and output prediction questions (30%).
+`,
+    "Full Mock Session": `
+Conduct a realistic 2-phase full mock interview:
+- Phase 1 (First 30% of questions): HR warm-up, background, behavioral, and situational questions ("type": "hr").
+- Phase 2 (Remaining 70% of questions): Technical concepts ("type": "technical"), coding tasks ("type": "coding"), and output prediction ("type": "output_prediction").
+`
+  };
+
+  const selectedModePrompt = modeInstructions[mode] || modeInstructions["Technical Interview"];
 
   const messages = [
     {
       role: "system",
       content: `
-You are a real human interviewer conducting a professional interview.
+You are a real-world senior interviewer conducting an interview for the role of ${role} (${experience} experience).
 
-Speak in simple, natural English as if you are directly talking to the candidate.
+Selected Interview Mode: "${mode}"
 
-Generate exactly 25 interview questions.
+${selectedModePrompt}
+
+Generate a JSON array of exactly 15 interview question objects matching this JSON schema:
+[
+  {
+    "id": 1,
+    "type": "hr" | "technical" | "coding" | "output_prediction",
+    "question": "Clear, direct question text",
+    "codeSnippet": "Initial starter code for coding tasks OR the code snippet for output prediction tasks. Null for standard text questions.",
+    "language": "javascript"
+  }
+]
 
 Strict Rules:
-- Each question must contain between 15 and 30 words.
-- Each question must be a single complete sentence.
-- Do NOT number them.
-- Do NOT add explanations.
-- Do NOT add extra text before or after.
-- One question per line only.
-- Keep language simple and conversational.
-- Questions must feel practical and realistic.
-
-Difficulty progression (must follow this exactly):
-Questions 1-8   → Easy   (basics, introductions, simple concepts, tools used)
-Questions 9-17  → Medium (scenarios, project challenges, mid-level technical depth)
-Questions 18-25 → Hard   (system design, architecture, trade-offs, deep technical mastery)
-
-Make all 25 questions based on the candidate's role, experience, interviewMode, projects, skills, and resume details.
+- Return ONLY a valid JSON array. No markdown formatting outside JSON, no explanation before or after.
+- Questions must feel realistic, natural, and directly tailored to candidate's skills (${skillsText}), projects (${projectText}), and role (${role}).
+- For "coding" questions, provide clean initial starter boilerplate in "codeSnippet".
+- For "output_prediction" questions, provide a tricky code snippet in "codeSnippet" and ask candidate what it outputs or what bug it contains.
 `
     },
     {
       role: "user",
-      content: userPrompt
+      content: `Candidate Role: ${role}\nExperience: ${experience}\nSkills: ${skillsText}\nProjects: ${projectText}\nResume Context: ${safeResume}`
     }
   ];
 
@@ -170,67 +184,136 @@ Make all 25 questions based on the candidate's role, experience, interviewMode, 
       const response = await openai.chat.completions.create({
         model: "google/gemini-2.5-flash",
         messages: messages,
-        max_tokens: 500
+        max_tokens: 2000
       });
       text = response.choices[0].message.content;
     } else if (OPENAI_API_KEY && openai) {
       const response = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: messages,
+        response_format: { type: "json_object" }
       });
       text = response.choices[0].message.content;
     } else if (GEMINI_API_KEY && model) {
       const combinedText = messages.map(m => m.content).join('\n\n');
       const result = await generateGeminiContent({
-        contents: [{ role: 'user', parts: [{ text: combinedText }] }]
+        contents: [{ role: 'user', parts: [{ text: combinedText }] }],
+        generationConfig: { responseMimeType: "application/json" }
       });
       text = result.response.text();
     } else {
       throw new Error('No AI provider configured');
     }
     
-    const questions = text.split('\n').filter(q => q.trim().length > 10).slice(0, 25);
-    console.log(`✅ Generated ${questions.length} questions`);
-    return questions;
+    console.log("Raw Generated Questions JSON:", text.substring(0, 300));
+    const parsedQuestions = parseJsonArraySafely(text);
+    
+    if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
+      return parsedQuestions;
+    }
+    throw new Error('Failed to parse JSON array from AI output');
   } catch (error) {
-    console.error("Question Generation Error:", error);
-    return [
-      // Easy (1-8)
-      "Can you briefly introduce yourself and describe your background as a software developer?",
-      "What programming languages and frameworks are you most comfortable working with daily?",
-      "How do you usually structure your workflow when starting a new development project?",
-      "Can you walk me through one of the projects listed on your resume?",
-      "What tools do you use for version control and how do you manage branching strategies?",
-      "How do you stay up to date with the latest trends and technologies in software development?",
-      "Describe a typical day at your previous job and your main responsibilities.",
-      "What do you consider your greatest technical strength and why?",
-      // Medium (9-17)
-      "Can you describe a challenging bug you encountered and explain how you resolved it?",
-      "How do you approach writing unit tests and ensuring code quality in your projects?",
-      "Tell me about a time you had to learn a new technology quickly to meet a project deadline.",
-      "How have you handled disagreements with teammates about technical decisions?",
-      "Describe a time when you optimized a slow or inefficient piece of code for better performance.",
-      "How do you handle scope creep or changing requirements mid-project?",
-      "Tell me about your experience with RESTful APIs and how you design or consume them.",
-      "How do you approach code reviews — both giving and receiving feedback?",
-      "Describe a project where you had to collaborate closely with designers or product managers.",
-      // Hard (18-25)
-      "How would you design a scalable authentication system for a large multi-tenant application?",
-      "Explain the trade-offs between monolithic and microservice architectures in production systems.",
-      "How do you approach database schema design for high-read, high-write workloads?",
-      "Describe how you would implement a real-time notification system for millions of concurrent users.",
-      "How do you ensure security best practices are enforced throughout the software development lifecycle?",
-      "Walk me through how you would debug a production outage affecting thousands of users.",
-      "How do you design a system that needs to handle eventual consistency across distributed services?",
-      "What strategies do you use to make architectural decisions that balance speed, cost, and maintainability?"
-    ];
+    console.error("Question Generation Error:", error.message);
+    // Mode-specific fallback questions
+    if (mode === "HR Interview") {
+      return [
+        { id: 1, type: "hr", question: "Can you introduce yourself and describe your professional journey and career goals?" },
+        { id: 2, type: "hr", question: "Tell me about a time you faced a tight deadline. How did you prioritize tasks under pressure?" },
+        { id: 3, type: "hr", question: "Describe a situation where you had a conflict with a teammate over technical direction. How did you resolve it?" },
+        { id: 4, type: "hr", question: "What is your greatest professional strength and one area you actively seek to improve?" },
+        { id: 5, type: "hr", question: "Why are you interested in this role and what work environment helps you thrive?" }
+      ];
+    } else if (mode === "Technical Interview") {
+      return [
+        { 
+          id: 1, 
+          type: "coding", 
+          question: "Write a JavaScript function to find the first non-repeating character in a string.",
+          codeSnippet: "function firstUniqChar(s) {\n  // Write your code here\n}",
+          language: "javascript"
+        },
+        { 
+          id: 2, 
+          type: "output_prediction", 
+          question: "What will the following JavaScript code output to the console and why?",
+          codeSnippet: "console.log(typeof null);\nconsole.log(1 + '2' + 3);\nconsole.log(1 + + '2' + 3);",
+          language: "javascript"
+        },
+        { 
+          id: 3, 
+          type: "technical", 
+          question: "Walk me through how you would optimize a slow database query in a Node.js application." 
+        },
+        { 
+          id: 4, 
+          type: "coding", 
+          question: "Implement a function to check if two strings are valid anagrams of each other.",
+          codeSnippet: "function isAnagram(s, t) {\n  // Write your solution here\n}",
+          language: "javascript"
+        },
+        { 
+          id: 5, 
+          type: "technical", 
+          question: "Explain the difference between SQL and NoSQL databases and when you would choose MongoDB over PostgreSQL." 
+        }
+      ];
+    } else {
+      return [
+        { id: 1, type: "hr", question: "Introduce yourself and explain why you're interested in this role." },
+        { id: 2, type: "hr", question: "Describe a challenging situation in your previous project and how you handled it." },
+        { 
+          id: 3, 
+          type: "coding", 
+          question: "Write a function to flatten a deeply nested array in JavaScript.",
+          codeSnippet: "function flattenArray(arr) {\n  // Write your solution here\n}",
+          language: "javascript"
+        },
+        { 
+          id: 4, 
+          type: "output_prediction", 
+          question: "Predict the output of the following asynchronous JavaScript code execution:",
+          codeSnippet: "console.log('1');\nsetTimeout(() => console.log('2'), 0);\nPromise.resolve().then(() => console.log('3'));\nconsole.log('4');",
+          language: "javascript"
+        },
+        { id: 5, type: "technical", question: "How do you handle authentication and authorization securely in a full stack MERN web application?" }
+      ];
+    }
   }
+};
+
+// Robust JSON Array Extractor to prevent syntax errors from markdown commentary or unescaped text
+const parseJsonArraySafely = (text) => {
+  if (!text || typeof text !== 'string') return null;
+  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  // 1. Direct JSON parse
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object') {
+      const key = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
+      if (key) return parsed[key];
+    }
+  } catch (e) {}
+
+  // 2. Bracket matching extraction
+  const firstOpen = cleaned.indexOf('[');
+  const lastClose = cleaned.lastIndexOf(']');
+  if (firstOpen !== -1 && lastClose > firstOpen) {
+    const candidate = cleaned.substring(firstOpen, lastClose + 1);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {}
+  }
+
+  return null;
 };
 
 // Retry with exponential backoff for rate-limited (429) AND transiently
 // overloaded (503) requests — Gemini returns 503 under high demand, which
 // is temporary and worth retrying rather than failing immediately.
-const retryWithBackoff = async (fn, retries = 4, delayMs = 1000) => {
+const retryWithBackoff = async (fn, retries = 4, delayMs = 1200) => {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await fn();
@@ -256,7 +339,7 @@ const retryWithBackoff = async (fn, retries = 4, delayMs = 1000) => {
 // Preview/newest Gemini models sometimes stay overloaded (503) for extended
 // windows regardless of retries. Rather than retrying the same saturated
 // model forever, fall through to a more available, established model.
-const GEMINI_MODEL_CHAIN = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+const GEMINI_MODEL_CHAIN = ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-2.0-flash'];
 const geminiModelCache = {};
 
 const getGeminiModel = (modelName) => {
@@ -389,6 +472,107 @@ Answer: ${answer}
   }
 };
 
+const evaluateSingleAnswerDetailed = async (questionObj, answer, codeInput) => {
+  initAI();
+  const qText = typeof questionObj === 'string' ? questionObj : questionObj?.question || '';
+  const qType = questionObj?.type || 'technical';
+  const snippet = questionObj?.codeSnippet || '';
+
+  const messages = [
+    {
+      role: "system",
+      content: `
+You are a senior tech lead & HR interviewer evaluating a candidate's answer during a real interview.
+
+Question Type: "${qType}"
+Question: "${qText}"
+Original Code Snippet (if any): "${snippet}"
+
+Candidate's Answer/Explanation: "${answer || 'No text provided'}"
+Candidate's Submitted Code (if any): "${codeInput || 'No code provided'}"
+
+Rules:
+- Be strict, realistic, and honest.
+- If candidate says "I don't know", "no idea", "not sure", or leaves a blank/meaningless answer, score 0 out of 10 and set isCorrect to false.
+- Highlight EXACTLY where the user went wrong in errorAnalysis.
+
+Return ONLY valid JSON matching this schema:
+{
+  "isCorrect": false,
+  "score": 0,
+  "confidence": 0,
+  "communication": 0,
+  "correctness": 0,
+  "feedback": "Short 1-2 sentence overall summary",
+  "errorAnalysis": "Detailed breakdown explaining exactly where the user's logic, code syntax, output prediction, or communication went wrong. Be specific!",
+  "idealSolution": "Clean, working ideal code or sample answer showcasing the correct approach."
+}
+`
+    },
+    {
+      role: "user",
+      content: `Evaluate candidate submission.`
+    }
+  ];
+
+  try {
+    let text;
+    if (isOpenRouter && openai) {
+      const response = await openai.chat.completions.create({
+        model: "google/gemini-2.5-flash",
+        messages: messages,
+      });
+      text = response.choices[0].message.content;
+    } else if (OPENAI_API_KEY && openai) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: messages,
+        response_format: { type: "json_object" },
+      });
+      text = response.choices[0].message.content;
+    } else if (GEMINI_API_KEY && model) {
+      const combinedText = messages.map(m => m.content).join('\n\n');
+      const result = await generateGeminiContent({
+        contents: [{ role: 'user', parts: [{ text: combinedText }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      });
+      text = result.response.text();
+    } else {
+      throw new Error('No AI provider configured');
+    }
+    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    return parsed;
+  } catch (error) {
+    console.error("Detailed Evaluation Error:", error);
+    const combinedStr = `${answer || ''} ${codeInput || ''}`.toLowerCase();
+    const isWeak = !combinedStr.trim() || combinedStr.includes("don't know") || combinedStr.includes("dont know") || combinedStr.includes("no idea") || combinedStr.length < 10;
+    
+    if (isWeak) {
+      return {
+        isCorrect: false,
+        score: 0,
+        confidence: 0,
+        communication: 0,
+        correctness: 0,
+        feedback: "The candidate indicated they did not know the answer or provided an incomplete response.",
+        errorAnalysis: "Candidate was unable to answer the question or explain their technical approach.",
+        idealSolution: "Review key concepts for this topic and structure responses using the STAR method."
+      };
+    }
+
+    return {
+      isCorrect: true,
+      score: 6,
+      confidence: 6,
+      communication: 6,
+      correctness: 6,
+      feedback: "Answer recorded successfully. Practice explaining with more depth.",
+      errorAnalysis: "Review code syntax, boundary conditions, and edge case validation.",
+      idealSolution: "Ensure you handle null checks and edge cases explicitly."
+    };
+  }
+};
 
 const evaluateInterview = async (answers) => {
   // Evaluate answers with concurrency limit (3 at a time) + retry backoff to avoid rate limits
@@ -398,10 +582,10 @@ const evaluateInterview = async (answers) => {
     3
   );
   
-  const totalConfidence = results.reduce((sum, r) => sum + r.confidence, 0);
-  const totalCommunication = results.reduce((sum, r) => sum + r.communication, 0);
-  const totalCorrectness = results.reduce((sum, r) => sum + r.correctness, 0);
-  const totalFinal = results.reduce((sum, r) => sum + r.finalScore, 0);
+  const totalConfidence = results.reduce((sum, r) => sum + (r.confidence || 7), 0);
+  const totalCommunication = results.reduce((sum, r) => sum + (r.communication || 7), 0);
+  const totalCorrectness = results.reduce((sum, r) => sum + (r.correctness || 7), 0);
+  const totalFinal = results.reduce((sum, r) => sum + (r.finalScore || r.score || 7), 0);
   
   return {
     overallScore: (totalFinal / results.length).toFixed(1),
@@ -411,11 +595,11 @@ const evaluateInterview = async (answers) => {
       correctness: (totalCorrectness / results.length).toFixed(1)
     },
     breakdown: answers.map((a, i) => ({
-      question: a.question,
-      score: results[i].finalScore,
+      question: typeof a.question === 'object' ? a.question.question : a.question,
+      score: results[i].finalScore || results[i].score || 7,
       feedback: results[i].feedback
     }))
   };
 };
 
-module.exports = { extractResumeData, generateQuestions, evaluateInterview };
+module.exports = { extractResumeData, generateQuestions, evaluateSingleAnswerDetailed, evaluateInterview };

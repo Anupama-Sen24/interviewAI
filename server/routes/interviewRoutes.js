@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const pdf = require('pdf-parse');
-const { extractResumeData, generateQuestions, evaluateInterview } = require('../services/aiService');
+const { extractResumeData, generateQuestions, evaluateSingleAnswerDetailed, evaluateInterview } = require('../services/aiService');
 const Interview = require('../models/Interview');
 const authMiddleware = require('./authMiddleware');
 
@@ -14,14 +14,13 @@ router.post('/analyze-resume', upload.single('resume'), async (req, res) => {
       return res.status(400).json({ error: 'Please upload a resume (PDF)' });
     }
 
+    const mode = req.body.mode || 'Technical Interview';
     const dataBuffer = req.file.buffer;
     let resumeText = '';
     try {
       const data = await pdf(dataBuffer);
       resumeText = data.text;
       console.log('✅ Extracted Resume Text (Length:', resumeText.length, ')');
-      console.log('📄 Text Preview:', resumeText.substring(0, 200).replace(/\n/g, ' '));
-
     } catch (pdfError) {
       console.error('PDF parse error:', pdfError);
       resumeText = "Generic Software Engineer Resume";
@@ -32,14 +31,15 @@ router.post('/analyze-resume', upload.single('resume'), async (req, res) => {
       const extractedData = await extractResumeData(resumeText);
       console.log('✅ Extracted Data:', extractedData);
 
-      // Step 2: Generate questions based on extracted data
-      const questions = await generateQuestions(extractedData, resumeText);
-      console.log('✅ Generated Questions:', questions.length);
+      // Step 2: Generate questions based on extracted data & mode
+      const questions = await generateQuestions(extractedData, resumeText, mode);
+      console.log('✅ Generated Questions:', questions.length, 'Mode:', mode);
 
       res.json({ 
         success: true, 
         questions,
-        extractedData
+        extractedData,
+        resumeText
       });
     } catch (aiError) {
       console.error('AI Service Error:', aiError);
@@ -48,6 +48,28 @@ router.post('/analyze-resume', upload.single('resume'), async (req, res) => {
   } catch (error) {
     console.error('Route Error:', error);
     res.status(500).json({ error: error.message || 'Failed to analyze resume' });
+  }
+});
+
+router.post('/generate-questions', async (req, res) => {
+  try {
+    const { extractedData, resumeText, mode } = req.body;
+    const questions = await generateQuestions(extractedData || {}, resumeText || '', mode || 'Technical Interview');
+    res.json({ success: true, questions });
+  } catch (error) {
+    console.error('Generate Questions Route Error:', error);
+    res.status(500).json({ error: 'Failed to generate questions' });
+  }
+});
+
+router.post('/evaluate-single', async (req, res) => {
+  try {
+    const { question, answer, code } = req.body;
+    const evaluation = await evaluateSingleAnswerDetailed(question, answer, code);
+    res.json({ success: true, evaluation });
+  } catch (error) {
+    console.error('Single Eval Route Error:', error);
+    res.status(500).json({ error: 'Failed to evaluate single answer' });
   }
 });
 
